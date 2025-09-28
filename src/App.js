@@ -61,6 +61,9 @@ function App() {
         simpleStorage.removeItem('caltrax-signed-up');
         simpleStorage.removeItem('caltrax-macros');
         
+        // Disable database calls for now to prevent errors
+        console.log('⚠️ Database temporarily disabled - using local storage only');
+        
         console.log('✅ Cleared local storage, showing landing page');
         setCurrentView('landing');
         setUser(null);

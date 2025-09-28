@@ -9,6 +9,13 @@ export const supabase = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+// Log database status
+if (!supabase) {
+  console.warn('⚠️ Supabase not configured - database features disabled');
+} else {
+  console.log('✅ Supabase configured - database features enabled');
+}
+
 export interface User {
   id?: string;
   clerk_user_id: string;

@@ -35,7 +35,7 @@ export interface DailyTotals {
 // Get user ID from Clerk user ID
 export async function getUserIdFromClerkId(clerkUserId: string): Promise<string | null> {
   if (!supabase) {
-    console.warn('Supabase not configured, cannot get user ID');
+    console.warn('⚠️ Supabase not configured, cannot get user ID - using local storage only');
     return null;
   }
 
