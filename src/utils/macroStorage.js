@@ -78,6 +78,8 @@ export const addFoodEntry = async (foodData, clerkUserId = null) => {
     } catch (error) {
       console.error('❌ Failed to save food entry to database:', error);
     }
+  } else {
+    console.log('⚠️ No Clerk user ID - saving to local storage only');
   }
   
   return entry;

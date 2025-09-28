@@ -63,6 +63,7 @@ function App() {
         
         // Disable database calls for now to prevent errors
         console.log('⚠️ Database temporarily disabled - using local storage only');
+        console.log('⚠️ Clerk integration temporarily disabled - using simple auth');
         
         console.log('✅ Cleared local storage, showing landing page');
         setCurrentView('landing');
