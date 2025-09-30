@@ -140,20 +140,31 @@ export async function getUserByClerkId(clerkUserId: string): Promise<User | null
   }
 
   try {
-    const { data, error } = await supabase
+    console.log('🔍 Looking up user in database:', clerkUserId);
+    
+    // Add timeout to prevent hanging
+    const queryPromise = supabase
       .from('profiles')
       .select('*')
       .eq('clerk_user_id', clerkUserId)
       .single();
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database query timeout')), 10000)
+    );
+    
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
     if (error) {
       if (error.code === 'PGRST116') { // No rows found
+        console.log('👤 User not found in database');
         return null;
       }
       console.error('Error getting user:', error);
       return null;
     }
 
+    console.log('✅ User found in database:', data?.email);
     return data;
   } catch (error) {
     console.error('Error in getUserByClerkId:', error);

@@ -58,9 +58,15 @@ function AppContent() {
         if (isSignedIn && user) {
           console.log('✅ User signed in with Clerk:', user.id);
           
-          // Check payment status from database
+          // Check payment status from database with timeout
           try {
-            const paymentStatus = await paymentService.checkPaymentStatus(user.id);
+            console.log('🔍 Checking payment status...');
+            const paymentStatusPromise = paymentService.checkPaymentStatus(user.id);
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Payment check timeout')), 5000)
+            );
+            
+            const paymentStatus = await Promise.race([paymentStatusPromise, timeoutPromise]);
             console.log('💳 Payment status:', paymentStatus);
             
             setHasPaid(paymentStatus.hasPaid);
@@ -79,12 +85,16 @@ function AppContent() {
             }
           } catch (error) {
             console.error('❌ Error checking payment status:', error);
+            console.log('🔄 Falling back to local storage...');
+            
             // Fallback to local storage
             const localUser = simpleStorage.getItem('caltrax-user');
             if (localUser?.profile) {
+              console.log('✅ Found local user profile, going to app');
               setCurrentView('app');
               setProfileCompleted(true);
             } else {
+              console.log('📝 No local profile, going to profile setup');
               setCurrentView('profile');
             }
           }
@@ -310,7 +320,13 @@ function AppContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+        <div className="text-white text-xl text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <div>Loading...</div>
+          <div className="text-sm text-gray-400 mt-2">
+            {!isLoaded ? 'Initializing authentication...' : 'Loading app...'}
+          </div>
+        </div>
       </div>
     );
   }
