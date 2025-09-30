@@ -15,9 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
 import { Progress } from './ui/Progress';
 import { getTodayMacros, getWeekMacros, getWeeklyTotals, deleteFoodEntry } from '../utils/macroStorage';
-import { getTodayEntries, getEntriesForDateRange, deleteFoodEntry as deleteFoodEntryFromDB } from '../lib/dailyTracking.ts';
+import { useUser } from '@clerk/clerk-react';
 
-// Helper functions
 const formatTime = (timestamp) => {
   return new Date(timestamp).toLocaleTimeString([], { 
     hour: '2-digit', 
@@ -35,8 +34,11 @@ const getProgressColor = (percentage) => {
   return 'text-red-400';
 };
 
-export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onShowWorkout, user }) {
-  const [view, setView] = useState('today'); // 'today' or 'week'
+export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onShowWorkout }) {
+  // Use Clerk's user hook
+  const { user, isLoaded } = useUser();
+  
+  const [view, setView] = useState('today');
   const [todayData, setTodayData] = useState(null);
   const [weekData, setWeekData] = useState(null);
   const [weeklyTotals, setWeeklyTotals] = useState(null);
@@ -47,174 +49,88 @@ export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onSh
     carbs_g: 250
   });
 
-  // Update daily goals when user profile changes
+  // Update daily goals from Clerk user metadata
   useEffect(() => {
-    console.log('🔍 MacroDashboard useEffect - user:', user);
-    console.log('🔍 MacroDashboard useEffect - user?.profile:', user?.profile);
+    if (!isLoaded) return;
     
-    if (user?.profile) {
-      console.log('MacroDashboard - Updating daily goals from user profile');
-      console.log('MacroDashboard - user.profile.calories:', user.profile.calories);
-      console.log('MacroDashboard - user.profile.macros:', user.profile.macros);
+    if (user?.unsafeMetadata?.caltraxProfile) {
+      const profile = user.unsafeMetadata.caltraxProfile;
+      console.log('MacroDashboard - Loading profile from Clerk:', profile);
       
       const newDailyGoals = {
-        calories: user.profile.calories || 2000,
-        protein_g: user.profile.macros?.protein || 150,
-        fat_g: user.profile.macros?.fat || 65,
-        carbs_g: user.profile.macros?.carbs || 250
+        calories: profile.calories || 2000,
+        protein_g: profile.macros?.protein || 150,
+        fat_g: profile.macros?.fat || 65,
+        carbs_g: profile.macros?.carbs || 250
       };
       
-      console.log('MacroDashboard - Setting new daily goals:', newDailyGoals);
+      console.log('MacroDashboard - Setting goals:', newDailyGoals);
       setDailyGoals(newDailyGoals);
-    } else if (user) {
-      console.log('❌ User exists but no profile found, using default goals');
-      // User exists but no profile - this shouldn't happen but let's handle it
-      setDailyGoals({
-        calories: 2000,
-        protein_g: 150,
-        fat_g: 65,
-        carbs_g: 250
-      });
     } else {
-      console.log('❌ No user found, using default goals');
+      console.log('MacroDashboard - No profile found, using defaults');
     }
-  }, [user]);
-
+  }, [user, isLoaded]);
 
   useEffect(() => {
     loadData();
   }, [view]);
 
   const loadData = async () => {
+    // For now, use localStorage until database is set up
+    const today = getTodayMacros();
+    setTodayData(today);
+    
+    if (view === 'week') {
+      const week = getWeekMacros();
+      const totals = getWeeklyTotals();
+      setWeekData(week);
+      setWeeklyTotals(totals);
+    }
+    
+    /* TODO: Replace with database calls when backend is ready
     if (!user?.id) {
-      // Fallback to local storage if no user
-      const today = getTodayMacros();
-      setTodayData(today);
-      
-      if (view === 'week') {
-        const week = getWeekMacros();
-        const totals = getWeeklyTotals();
-        setWeekData(week);
-        setWeeklyTotals(totals);
-      }
       return;
     }
 
     try {
-      // Load from database
-      const todayEntries = await getTodayEntries(user.id);
-      const todayData = {
-        date: new Date().toISOString().split('T')[0],
-        entries: todayEntries.map(entry => ({
-          id: entry.id,
-          timestamp: entry.created_at,
-          name: entry.name,
-          nutrition: {
-            calories: entry.calories,
-            protein_g: entry.protein_g,
-            fat_g: entry.fat_g,
-            carbs_g: entry.carbs_g
-          },
-          healthScore: entry.health_score,
-          confidence: entry.confidence
-        })),
-        totals: {
-          calories: todayEntries.reduce((sum, entry) => sum + (entry.calories || 0), 0),
-          protein_g: todayEntries.reduce((sum, entry) => sum + (entry.protein_g || 0), 0),
-          fat_g: todayEntries.reduce((sum, entry) => sum + (entry.fat_g || 0), 0),
-          carbs_g: todayEntries.reduce((sum, entry) => sum + (entry.carbs_g || 0), 0)
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/tracking/entries`, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`
         }
-      };
-      setTodayData(todayData);
+      });
       
-      if (view === 'week') {
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6); // Sunday
-        
-        const weekEntries = await getEntriesForDateRange(
-          user.id, 
-          weekStart.toISOString().split('T')[0], 
-          weekEnd.toISOString().split('T')[0]
-        );
-        
-        // Group entries by date
-        const weekData = [];
-        for (let i = 0; i < 7; i++) {
-          const date = new Date(weekStart);
-          date.setDate(date.getDate() + i);
-          const dateStr = date.toISOString().split('T')[0];
-          
-          const dayEntries = weekEntries.filter(entry => entry.date === dateStr);
-          weekData.push({
-            date: dateStr,
-            entries: dayEntries.map(entry => ({
-              id: entry.id,
-              timestamp: entry.created_at,
-              name: entry.name,
-              nutrition: {
-                calories: entry.calories,
-                protein_g: entry.protein_g,
-                fat_g: entry.fat_g,
-                carbs_g: entry.carbs_g
-              },
-              healthScore: entry.health_score,
-              confidence: entry.confidence
-            })),
-            totals: {
-              calories: dayEntries.reduce((sum, entry) => sum + (entry.calories || 0), 0),
-              protein_g: dayEntries.reduce((sum, entry) => sum + (entry.protein_g || 0), 0),
-              fat_g: dayEntries.reduce((sum, entry) => sum + (entry.fat_g || 0), 0),
-              carbs_g: dayEntries.reduce((sum, entry) => sum + (entry.carbs_g || 0), 0)
-            }
-          });
-        }
-        
-        const weeklyTotals = weekData.reduce((totals, day) => ({
-          calories: totals.calories + day.totals.calories,
-          protein_g: totals.protein_g + day.totals.protein_g,
-          fat_g: totals.fat_g + day.totals.fat_g,
-          carbs_g: totals.carbs_g + day.totals.carbs_g
-        }), { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
-        
-        setWeekData(weekData);
-        setWeeklyTotals(weeklyTotals);
+      if (response.ok) {
+        const data = await response.json();
+        // Process database data...
       }
     } catch (error) {
-      console.error('Error loading data from database:', error);
-      // Fallback to local storage
-      const today = getTodayMacros();
-      setTodayData(today);
-      
-      if (view === 'week') {
-        const week = getWeekMacros();
-        const totals = getWeeklyTotals();
-        setWeekData(week);
-        setWeeklyTotals(totals);
-      }
+      console.error('Error loading from database:', error);
     }
+    */
   };
 
   const handleDeleteEntry = async (date, entryId) => {
-    // Delete from local storage
-    const localSuccess = deleteFoodEntry(date, entryId);
+    const success = deleteFoodEntry(date, entryId);
     
-    // Also delete from database if we have a user
-    if (user?.id) {
-      try {
-        await deleteFoodEntryFromDB(user.id, entryId);
-        console.log('✅ Food entry deleted from database');
-      } catch (error) {
-        console.error('❌ Failed to delete food entry from database:', error);
-      }
-    }
-    
-    if (localSuccess) {
+    if (success) {
       loadData();
     }
+    
+    /* TODO: Also delete from database when backend is ready
+    if (user?.id) {
+      try {
+        await fetch(`${process.env.REACT_APP_API_URL}/api/tracking/entry/${entryId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${userToken}`
+          }
+        });
+      } catch (error) {
+        console.error('Failed to delete from database:', error);
+      }
+    }
+    */
   };
-
 
   if (!todayData) {
     return (
@@ -227,7 +143,6 @@ export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onSh
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-zinc-100">
       <div className="max-w-6xl mx-auto p-6">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <Button 
@@ -263,36 +178,26 @@ export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onSh
               <Plus className="w-4 h-4 mr-2" />
               Add Food
             </Button>
-            <Button 
-              onClick={() => {
-                console.log('Meal Plan button clicked - calling onShowMealPlan');
-                if (onShowMealPlan) {
-                  onShowMealPlan();
-                } else {
-                  console.error('onShowMealPlan is not defined');
-                }
-              }}
-              variant="outline"
-              className="border-zinc-600 text-zinc-300 hover:bg-zinc-800"
-            >
-              <Utensils className="w-4 h-4 mr-2" />
-              Meal Plan
-            </Button>
-            <Button 
-              onClick={() => {
-                console.log('Workout Plan button clicked - calling onShowWorkout');
-                if (onShowWorkout) {
-                  onShowWorkout();
-                } else {
-                  console.error('onShowWorkout is not defined');
-                }
-              }}
-              variant="outline"
-              className="border-zinc-600 text-zinc-300 hover:bg-zinc-800"
-            >
-              <Dumbbell className="w-4 h-4 mr-2" />
-              Workout Plan
-            </Button>
+            {onShowMealPlan && (
+              <Button 
+                onClick={onShowMealPlan}
+                variant="outline"
+                className="border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Utensils className="w-4 h-4 mr-2" />
+                Meal Plan
+              </Button>
+            )}
+            {onShowWorkout && (
+              <Button 
+                onClick={onShowWorkout}
+                variant="outline"
+                className="border-zinc-600 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Dumbbell className="w-4 h-4 mr-2" />
+                Workout Plan
+              </Button>
+            )}
           </div>
         </div>
 
@@ -321,7 +226,6 @@ function TodayView({ data, goals, onDeleteEntry, onAddFood }) {
 
   return (
     <div className="space-y-6">
-      {/* Macro Progress Cards */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Object.entries(totals).map(([key, value]) => {
           const goal = goals[key];
@@ -349,7 +253,6 @@ function TodayView({ data, goals, onDeleteEntry, onAddFood }) {
         })}
       </div>
 
-      {/* Food Entries */}
       <Card className="bg-zinc-900/60 border-zinc-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -389,9 +292,11 @@ function TodayView({ data, goals, onDeleteEntry, onAddFood }) {
                         <span className="text-xs text-zinc-400">
                           {formatTime(entry.timestamp)}
                         </span>
-                        <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
-                          Score: {entry.healthScore}/10
-                        </span>
+                        {entry.healthScore && (
+                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">
+                            Score: {entry.healthScore}/10
+                          </span>
+                        )}
                       </div>
                       <div className="grid grid-cols-4 gap-4 text-sm text-zinc-400">
                         <div>{entry.nutrition.calories} cal</div>
@@ -422,9 +327,16 @@ function TodayView({ data, goals, onDeleteEntry, onAddFood }) {
 function WeekView({ data, totals, goals, onDeleteEntry }) {
   const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
+  if (!data || !totals) {
+    return (
+      <div className="text-center py-8 text-zinc-400">
+        <p>Loading week data...</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
-      {/* Weekly Totals */}
       <Card className="bg-zinc-900/60 border-zinc-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -457,7 +369,6 @@ function WeekView({ data, totals, goals, onDeleteEntry }) {
         </CardContent>
       </Card>
 
-      {/* Daily Breakdown */}
       <div className="grid gap-4">
         {data.map((day, index) => (
           <Card key={day.date} className="bg-zinc-900/60 border-zinc-800">

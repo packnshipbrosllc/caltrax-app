@@ -5,47 +5,23 @@ import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { Progress } from "./ui/Progress";
 import { addFoodEntry } from "../utils/macroStorage";
-import { simpleStorage } from "../utils/simpleStorage";
 import PaymentModal from "./PaymentModal";
 import BarcodeScanner from "./BarcodeScanner";
 import ManualFoodInput from "./ManualFoodInput";
 import { hasAdminAccess } from "../utils/security";
-/**
- * FoodLens Vision Demo
- * -------------------------------------------------
- * A single-file demo that:
- * - Streams the device camera
- * - Captures a frame every N seconds
- * - Sends it to the ChatGPT Vision model for nutrition extraction
- * - Speaks nutrition facts via voice (Web Speech or OpenAI TTS)
- * - Shows a 1-10 health score, with animated pros/cons
- *
- * Notes:
- * - Paste your OpenAI API key in the input to make live calls.
- * - This is a concept demo. Accuracy depends on what the model can infer visually.
- * - For packaged foods, try to include the label in view for better results.
- * - Works best in Chrome/Edge on desktop or Android. iOS Safari camera constraints
- *   may require HTTPS and user gestures.
- */
+import { useUser } from '@clerk/clerk-react';
 
-// Note: Nutrition analysis now handled by secure backend API
-
-// Basic scoring heuristic if the model doesn't provide one. You can tweak this freely.
 function computeHealthScore(nutrition) {
   if (!nutrition) return 5;
   const { protein_g = 0, fat_g = 0, carbs_g = 0, calories = 0 } = nutrition;
-  // High-protein, moderate calories -> higher score; very high fat/sugar-like carbs -> lower
   let score = 5;
   if (protein_g >= 20) score += 2; else if (protein_g >= 10) score += 1;
   if (calories <= 200) score += 1; else if (calories >= 500) score -= 1;
-  // Penalize very high fat
   if (fat_g >= 20) score -= 2; else if (fat_g >= 10) score -= 1;
-  // Penalize very high carbs (proxy for simple sugars)
   if (carbs_g >= 50) score -= 2; else if (carbs_g >= 30) score -= 1;
   return Math.max(1, Math.min(10, Math.round(score)));
 }
 
-// Speak with browser TTS as a simple default (no API calls required)
 function speakWithBrowserTTS(text) {
   try {
     const utter = new SpeechSynthesisUtterance(text);
@@ -58,48 +34,21 @@ function speakWithBrowserTTS(text) {
   }
 }
 
-// Experimental: Speak using OpenAI TTS. Requires a valid API key and user gesture on some browsers.
-async function speakWithOpenAI({ apiKey, text, voice = "alloy" }) {
-  if (!apiKey) return speakWithBrowserTTS(text);
-  try {
-    const res = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini-tts",
-        voice,
-        input: text,
-        format: "mp3",
-      }),
-    });
-    if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    await audio.play();
-  } catch (e) {
-    console.warn("OpenAI TTS failed, falling back to browser TTS.", e);
-    speakWithBrowserTTS(text);
-  }
-}
-
-// Note: JSON parsing now handled by secure backend API
-
-export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan, onShowAdmin, onShowSubscriptionManagement, user: propUser }) {
-  console.log('🔍 === FOODLENSDEMO RENDER ===');
-  console.log('FoodLensDemo - propUser:', propUser);
-  console.log('FoodLensDemo - onLogout:', onLogout);
+export default function FoodLensDemo({ 
+  onLogout, 
+  onShowDashboard, 
+  onShowMealPlan, 
+  onShowAdmin, 
+  onShowSubscriptionManagement 
+}) {
+  // Use Clerk's user hook instead of prop
+  const { user, isLoaded } = useUser();
+  
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [streaming, setStreaming] = useState(false);
   const [autoScan, setAutoScan] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userToken, setUserToken] = useState(null);
-  const [user, setUser] = useState(null);
   const [useOpenAITTS, setUseOpenAITTS] = useState(false);
   const [error, setError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -118,38 +67,16 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
 
   const score = result.score || computeHealthScore(result.nutrition);
 
+  // Camera cleanup
   useEffect(() => {
-    console.log('🔍 === FOODLENSDEMO USEEFFECT DEBUG START ===');
-    // Check authentication on mount
-    const userData = simpleStorage.getItem('caltrax-user');
-    const hasSignedUp = simpleStorage.getItem('caltrax-signed-up');
-    
-    console.log('FoodLensDemo - userData:', userData);
-    console.log('FoodLensDemo - hasSignedUp:', hasSignedUp);
-    
-    if (userData && hasSignedUp) {
-      console.log('FoodLensDemo - User authenticated, setting up');
-      setUser(userData);
-      setIsAuthenticated(true);
-      // No need to check subscription status for now
-    } else {
-      console.log('FoodLensDemo - User NOT authenticated, calling logout');
-      console.log('🔍 === FOODLENSDEMO CALLING LOGOUT ===');
-      // Redirect to login if not authenticated
-      onLogout();
-      return;
-    }
-    console.log('🔍 === FOODLENSDEMO USEEFFECT DEBUG END ===');
-
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const tracks = videoRef.current.srcObject.getTracks();
         tracks.forEach(t => t.stop());
       }
     };
-  }, [onLogout]);
+  }, []);
 
-  // Separate effect for camera initialization
   const startCamera = async () => {
     try {
       console.log("Requesting camera access...");
@@ -174,32 +101,14 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
     }
   };
 
-  const checkSubscriptionStatus = async (token) => {
-    try {
-      const response = await fetch('http://localhost:5001/api/payments/subscription', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSubscriptionStatus(data);
-      }
-    } catch (error) {
-      console.error('Error checking subscription status:', error);
-    }
-  };
-
   // Auto-scan interval
   useEffect(() => {
-    if (!autoScan) return;
+    if (!autoScan || !streaming) return;
     const id = setInterval(() => {
       analyzeFrame();
     }, 3000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScan, useOpenAITTS]);
+  }, [autoScan, streaming, useOpenAITTS]);
 
   async function captureFrameBase64() {
     const video = videoRef.current;
@@ -212,81 +121,72 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, w, h);
-    return canvas.toDataURL("image/jpeg", 0.8); // base64 dataURL
+    return canvas.toDataURL("image/jpeg", 0.8);
   }
 
   async function analyzeFrame() {
-    if (isAnalyzing) return;
+    if (isAnalyzing || !streaming) return;
     
-    // Check authentication first
-    if (!isAuthenticated || !userToken) {
-      setError('Please sign up or login to use the nutrition analysis feature.');
-      return;
-    }
-    
+    // TEMPORARY: Mock analysis since backend isn't deployed
+    // TODO: Replace with actual backend API call when deployed
     const dataUrl = await captureFrameBase64();
     if (!dataUrl) return;
     setIsAnalyzing(true);
 
     try {
-      // Call our secure backend with authentication
-      const response = await fetch('http://localhost:5001/api/nutrition/analyze', {
+      // Mock data for development - replace with actual API call
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+      
+      const mockResult = {
+        name: "Sample Food",
+        nutrition: {
+          calories: 250,
+          protein_g: 15,
+          fat_g: 8,
+          carbs_g: 30
+        },
+        pros: ["Good protein content", "Moderate calories"],
+        cons: ["Could be lower in fat"],
+        confidence: 0.85,
+        health_score: 7
+      };
+      
+      /* 
+      // Real API call (uncomment when backend is deployed):
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/nutrition/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`, // Required for authentication
         },
         body: JSON.stringify({
           image: dataUrl,
-          sessionId: sessionStorage.getItem('sessionId') || generateSessionId()
+          userId: user?.id
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        
-        // Handle specific error codes
-        if (errorData.code === 'NO_TOKEN' || errorData.code === 'TOKEN_EXPIRED') {
-          // Token expired or missing, redirect to login
-          localStorage.removeItem('caltrax-token');
-          localStorage.removeItem('caltrax-user');
-          setIsAuthenticated(false);
-          setUserToken(null);
-          setUser(null);
-          setError('Session expired. Please login again.');
-          onLogout();
-          return;
-        }
-        
-        if (errorData.code === 'RATE_LIMIT_EXCEEDED') {
-          setError('Too many requests. Please wait before trying again.');
-          return;
-        }
-        
-        throw new Error(errorData.error || 'Analysis failed');
+        throw new Error('Analysis failed');
       }
 
-      const result = await response.json();
-      
-      // Process the result (same as before)
-      const score = result.health_score || computeHealthScore(result.nutrition);
+      const mockResult = await response.json();
+      */
+
+      const calculatedScore = mockResult.health_score || computeHealthScore(mockResult.nutrition);
       const stamped = {
-        ...result,
-        score,
+        ...mockResult,
+        score: calculatedScore,
         lastUpdated: new Date().toLocaleTimeString(),
       };
       setResult(stamped);
 
       // Add to macro tracking
-      addFoodEntry(stamped, propUser?.id);
+      if (user?.id) {
+        addFoodEntry(stamped, user.id);
+      }
 
       // Voice output
-      const ttsText = `${result.name}. Calories ${result.nutrition.calories}. Protein ${result.nutrition.protein_g} grams. Fat ${result.nutrition.fat_g} grams. Carbs ${result.nutrition.carbs_g} grams. Health score ${score} out of 10.`;
-      if (useOpenAITTS) {
-        await speakWithOpenAI({ apiKey: '', text: ttsText, voice: "alloy" });
-      } else {
-        speakWithBrowserTTS(ttsText);
-      }
+      const ttsText = `${mockResult.name}. Calories ${mockResult.nutrition.calories}. Protein ${mockResult.nutrition.protein_g} grams. Fat ${mockResult.nutrition.fat_g} grams. Carbs ${mockResult.nutrition.carbs_g} grams. Health score ${calculatedScore} out of 10.`;
+      speakWithBrowserTTS(ttsText);
 
     } catch (error) {
       console.error('Analysis error:', error);
@@ -296,13 +196,7 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
     }
   }
 
-  // Helper function for session ID
-  function generateSessionId() {
-    return 'session_' + Math.random().toString(36).substr(2, 9);
-  }
-
   const handleBarcodeDetected = (barcode, productInfo) => {
-    // In a real app, you'd look up the barcode in a food database
     const foodData = {
       name: productInfo?.name || `Product (${barcode})`,
       nutrition: productInfo?.nutrition || {
@@ -317,7 +211,9 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
       barcode: barcode
     };
 
-    addFoodEntry(foodData, propUser?.id);
+    if (user?.id) {
+      addFoodEntry(foodData, user.id);
+    }
     setResult(foodData);
     setShowBarcodeScanner(false);
   };
@@ -335,6 +231,14 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
     return "Very Poor";
   }, [score]);
 
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-zinc-100">
       <div className="max-w-6xl mx-auto p-6">
@@ -345,24 +249,11 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">CalTrax AI</h1>
           </div>
-        <div className="flex items-center gap-2">
-          <div className="bg-green-500/20 border border-green-500/30 rounded-xl px-3 py-2 text-sm text-green-300">
-            🔒 Authenticated as {user?.name || 'User'}
-          </div>
-          {subscriptionStatus && !subscriptionStatus.hasActiveSubscription && (
-            <button
-              onClick={() => setShowPaymentModal(true)}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all"
-            >
-              Upgrade to Premium
-            </button>
-          )}
-          {subscriptionStatus && subscriptionStatus.hasActiveSubscription && (
-            <div className="bg-purple-500/20 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-purple-300">
-              ✨ {subscriptionStatus.planType} Plan
+          <div className="flex items-center gap-2">
+            <div className="bg-green-500/20 border border-green-500/30 rounded-xl px-3 py-2 text-sm text-green-300">
+              🔒 {user?.firstName || user?.username || 'User'}
             </div>
-          )}
-            <Button variant="secondary" onClick={() => analyzeFrame()} disabled={isAnalyzing}>
+            <Button variant="secondary" onClick={() => analyzeFrame()} disabled={isAnalyzing || !streaming}>
               {isAnalyzing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Zap className="w-4 h-4 mr-1" />}
               Analyze Now
             </Button>
@@ -374,11 +265,13 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
               <Utensils className="w-4 h-4 mr-1" />
               Meal Plan
             </Button>
-            <Button variant="outline" onClick={onShowSubscriptionManagement} className="border-blue-600 text-blue-300 hover:bg-blue-800">
-              <CreditCard className="w-4 h-4 mr-1" />
-              Subscription
-            </Button>
-            {hasAdminAccess() && (
+            {onShowSubscriptionManagement && (
+              <Button variant="outline" onClick={onShowSubscriptionManagement} className="border-blue-600 text-blue-300 hover:bg-blue-800">
+                <CreditCard className="w-4 h-4 mr-1" />
+                Subscription
+              </Button>
+            )}
+            {hasAdminAccess() && onShowAdmin && (
               <Button variant="outline" onClick={onShowAdmin} className="border-purple-600 text-purple-300 hover:bg-purple-800">
                 <Settings className="w-4 h-4 mr-1" />
                 Admin
@@ -391,19 +284,20 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
           </div>
         </header>
 
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">
+            {error}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left: Camera preview */}
           <Card className="bg-zinc-900/60 border-zinc-800 overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2"><Camera className="w-5 h-5" /> Live Camera</CardTitle>
               <div className="flex items-center gap-3 text-sm">
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={autoScan} onChange={(e) => setAutoScan(e.target.checked)} />
+                  <input type="checkbox" checked={autoScan} onChange={(e) => setAutoScan(e.target.checked)} disabled={!streaming} />
                   Auto-scan
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={useOpenAITTS} onChange={(e) => setUseOpenAITTS(e.target.checked)} />
-                  OpenAI Voice
                 </label>
               </div>
             </CardHeader>
@@ -425,14 +319,9 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
                 <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
                 <canvas ref={canvasRef} className="hidden" />
               </div>
-              <div className="flex items-center gap-3 mt-3 text-xs text-zinc-400">
-                <Mic className="w-4 h-4" />
-                <span>Voice: {useOpenAITTS ? "OpenAI TTS (alloy)" : "Browser TTS"}</span>
-              </div>
               
-              {/* Alternative Input Methods */}
               <div className="mt-4 space-y-2">
-                <div className="text-xs text-zinc-400 mb-2">Or try these methods:</div>
+                <div className="text-xs text-zinc-400 mb-2">Alternative input methods:</div>
                 <div className="flex gap-2">
                   <Button
                     onClick={() => setShowBarcodeScanner(true)}
@@ -457,7 +346,6 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
             </CardContent>
           </Card>
 
-          {/* Right: Analysis panel */}
           <Card className="bg-zinc-900/60 border-zinc-800">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -564,22 +452,21 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
         </footer>
       </div>
 
-      {/* Payment Modal */}
-      <PaymentModal
-        isOpen={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
-        onPaymentSuccess={(data) => {
-          setSubscriptionStatus({
-            hasActiveSubscription: true,
-            planType: data.planType,
-            status: 'active',
-            currentPeriodEnd: data.periodEnd
-          });
-        }}
-        userToken={userToken}
-      />
+      {showPaymentModal && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onPaymentSuccess={(data) => {
+            setSubscriptionStatus({
+              hasActiveSubscription: true,
+              planType: data.planType,
+              status: 'active',
+              currentPeriodEnd: data.periodEnd
+            });
+          }}
+        />
+      )}
 
-      {/* Barcode Scanner Modal */}
       {showBarcodeScanner && (
         <BarcodeScanner
           onClose={() => setShowBarcodeScanner(false)}
@@ -587,7 +474,6 @@ export default function FoodLensDemo({ onLogout, onShowDashboard, onShowMealPlan
         />
       )}
 
-      {/* Manual Food Input Modal */}
       {showManualInput && (
         <ManualFoodInput
           onClose={() => setShowManualInput(false)}
