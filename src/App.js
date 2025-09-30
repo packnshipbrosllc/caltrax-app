@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ClerkProvider, useUser, useAuth } from '@clerk/clerk-react';
 import FoodLensDemo from './components/FoodLensDemo';
 import LandingPage from './components/LandingPage';
 import SimpleSignupPage from './components/SimpleSignupPage';
@@ -15,14 +16,20 @@ import DebugPanel from './components/DebugPanel';
 import { secureStorage, hasAdminAccess } from './utils/security';
 import { simpleStorage } from './utils/simpleStorage';
 import { authService } from './services/authService';
+import { paymentService } from './services/paymentService';
 
-function App() {
-  const [currentView, setCurrentView] = useState('landing'); // 'landing', 'signup', 'signin', 'profile', 'app', 'dashboard', 'mealplan', 'workout', 'admin'
-  const [user, setUser] = useState(null);
+// Main App Component with Clerk Integration
+function AppContent() {
+  const { user, isLoaded } = useUser();
+  const { isSignedIn } = useAuth();
+  const [currentView, setCurrentView] = useState('landing');
   const [isLoading, setIsLoading] = useState(true);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [profileCompleted, setProfileCompleted] = useState(false);
   const [showSubscriptionManagement, setShowSubscriptionManagement] = useState(false);
+  const [hasPaid, setHasPaid] = useState(false);
+  const [plan, setPlan] = useState(null);
+  const [trialUsed, setTrialUsed] = useState(false);
 
   // Check if we're on the auth callback route
   useEffect(() => {
@@ -35,40 +42,56 @@ function App() {
   // Track if we've already initialized to prevent re-initialization
   const hasInitialized = useRef(false);
 
-  // Initialize app on mount only
+  // Initialize app when Clerk loads
   useEffect(() => {
-    console.log('🔍 === USEEFFECT DEBUG START ===');
-    console.log('hasInitialized.current:', hasInitialized.current);
-    console.log('profileCompleted:', profileCompleted);
-    console.log('currentView:', currentView);
-    console.log('user:', user);
-    
-    // Don't initialize if we've already done it or if profile was just completed
-    if (hasInitialized.current || profileCompleted) {
-      console.log('Already initialized or profile completed, skipping');
-      console.log('🔍 === USEEFFECT DEBUG END (SKIPPED) ===');
+    if (!isLoaded) {
+      console.log('⏳ Clerk still loading...');
       return;
     }
-    
+
+    console.log('🔍 === CLERK LOADED ===');
+    console.log('isSignedIn:', isSignedIn);
+    console.log('user:', user);
+
     const initializeApp = async () => {
       try {
-        console.log('🔍 Initializing app...');
-        hasInitialized.current = true;
-        
-        // Clear old local storage data to start fresh
-        console.log('🧹 Clearing old local storage data...');
-        simpleStorage.removeItem('caltrax-user');
-        simpleStorage.removeItem('caltrax-signed-up');
-        simpleStorage.removeItem('caltrax-macros');
-        
-        // Disable database calls for now to prevent errors
-        console.log('⚠️ Database temporarily disabled - using local storage only');
-        console.log('⚠️ Clerk integration temporarily disabled - using simple auth');
-        
-        console.log('✅ Cleared local storage, showing landing page');
-        setCurrentView('landing');
-        setUser(null);
-        setProfileCompleted(false);
+        if (isSignedIn && user) {
+          console.log('✅ User signed in with Clerk:', user.id);
+          
+          // Check payment status from database
+          try {
+            const paymentStatus = await paymentService.checkPaymentStatus(user.id);
+            console.log('💳 Payment status:', paymentStatus);
+            
+            setHasPaid(paymentStatus.hasPaid);
+            setPlan(paymentStatus.plan);
+            setTrialUsed(paymentStatus.trialUsed);
+            
+            // Check if user has completed profile
+            const profileData = user.unsafeMetadata?.caltraxProfile;
+            if (profileData) {
+              console.log('✅ User has profile, going to app');
+              setCurrentView('app');
+              setProfileCompleted(true);
+            } else {
+              console.log('📝 User needs profile setup');
+              setCurrentView('profile');
+            }
+          } catch (error) {
+            console.error('❌ Error checking payment status:', error);
+            // Fallback to local storage
+            const localUser = simpleStorage.getItem('caltrax-user');
+            if (localUser?.profile) {
+              setCurrentView('app');
+              setProfileCompleted(true);
+            } else {
+              setCurrentView('profile');
+            }
+          }
+        } else {
+          console.log('🚪 User not signed in, showing landing page');
+          setCurrentView('landing');
+        }
       } catch (error) {
         console.error('Error initializing app:', error);
         setCurrentView('landing');
@@ -77,10 +100,8 @@ function App() {
       }
     };
 
-    // Initialize immediately
     initializeApp();
-    console.log('🔍 === USEEFFECT DEBUG END ===');
-  }, [profileCompleted]); // Add profileCompleted as dependency
+  }, [isLoaded, isSignedIn, user]);
 
   const handleGetStarted = () => {
     setCurrentView('signup');
@@ -125,7 +146,7 @@ function App() {
     console.log('handleSignIn - Verifying stored data:', verifyStored);
     console.log('handleSignIn - Stored data matches:', JSON.stringify(verifyStored) === JSON.stringify(userData));
     
-    setUser(userData);
+    // User data is handled by Clerk, no need to set it manually
     
     // Check if user has completed profile
     if (userData.profile) {
@@ -144,7 +165,7 @@ function App() {
 
   const handleSignup = (userData) => {
     console.log('handleSignup called with:', userData);
-    setUser(userData);
+    // User data is handled by Clerk, no need to set it manually
     // Check if user has completed profile
     if (userData.profile) {
       console.log('User has profile, going to app');
@@ -155,20 +176,36 @@ function App() {
     }
   };
 
-  const handleProfileComplete = (updatedUser) => {
+  const handleProfileComplete = async (updatedUser) => {
     console.log('🔍 === HANDLE PROFILE COMPLETE DEBUG START ===');
     console.log('handleProfileComplete called with:', updatedUser);
     console.log('Current view before profile complete:', currentView);
     console.log('Current user before profile complete:', user);
     console.log('Profile completed flag before:', profileCompleted);
     
-    // Update user and view immediately
-    setUser(updatedUser);
-    setCurrentView('app');
-    setProfileCompleted(true); // Set flag to prevent re-initialization
+    try {
+      // Save profile to Clerk metadata if user is signed in
+      if (user && user.id) {
+        console.log('💾 Saving profile to Clerk metadata...');
+        await paymentService.createOrUpdateUserProfile(user.id, user.emailAddresses?.[0]?.emailAddress || user.primaryEmailAddress?.emailAddress || '', updatedUser.profile);
+        console.log('✅ Profile saved to Clerk metadata');
+      }
+      
+      // Update user and view immediately
+      // User data is handled by Clerk, no need to set it manually
+      setCurrentView('app');
+      setProfileCompleted(true);
+      
+      console.log('Profile complete - set to app view and profileCompleted flag');
+      console.log('Updated user:', updatedUser);
+    } catch (error) {
+      console.error('❌ Error saving profile to Clerk:', error);
+      // Still update UI even if Clerk save fails
+      // User data is handled by Clerk, no need to set it manually
+      setCurrentView('app');
+      setProfileCompleted(true);
+    }
     
-    console.log('Profile complete - set to app view and profileCompleted flag');
-    console.log('Updated user:', updatedUser);
     console.log('🔍 === HANDLE PROFILE COMPLETE DEBUG END ===');
   };
 
@@ -189,9 +226,12 @@ function App() {
     simpleStorage.removeItem('caltrax-signed-up');
     
     // Reset app state
-    setUser(null);
+    // User data is handled by Clerk, no need to set it manually
     setProfileCompleted(false);
     setCurrentView('landing');
+    setHasPaid(false);
+    setPlan(null);
+    setTrialUsed(false);
     
     console.log('✅ User logged out - redirected to landing page');
     console.log('🔍 === LOGOUT DEBUG END ===');
@@ -199,7 +239,7 @@ function App() {
 
   const handleEmailVerified = (userData) => {
     console.log('✅ Email verified, setting user and redirecting to app');
-    setUser(userData);
+    // User data is handled by Clerk, no need to set it manually
     setCurrentView('app');
     setProfileCompleted(true);
   };
@@ -238,7 +278,7 @@ function App() {
     
     if (storedUser && storedUser !== user) {
       console.log('Updating user data from storage');
-      setUser(storedUser);
+      // User data is handled by Clerk, no need to set it manually
     }
     
     setCurrentView('dashboard');
@@ -369,6 +409,29 @@ function App() {
       
       
     </div>
+  );
+}
+
+// Main App with Clerk Provider
+function App() {
+  const clerkPublishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  
+  if (!clerkPublishableKey) {
+    console.error('❌ Missing REACT_APP_CLERK_PUBLISHABLE_KEY environment variable');
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black flex items-center justify-center">
+        <div className="text-white text-xl text-center">
+          <div>Missing Clerk configuration</div>
+          <div className="text-sm text-gray-400 mt-2">Please add REACT_APP_CLERK_PUBLISHABLE_KEY to environment variables</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ClerkProvider publishableKey={clerkPublishableKey}>
+      <AppContent />
+    </ClerkProvider>
   );
 }
 

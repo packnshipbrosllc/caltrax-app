@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Converter - PNG to JPG</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        h1 {
+            color: #4CAF50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #666;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #4CAF50;
+            background: #333;
+        }
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #2a4a2a;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .preview {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 5px;
+        }
+        .download-area {
+            margin-top: 20px;
+            padding: 20px;
+            background: #333;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background: #2a4a2a;
+            color: #4CAF50;
+            border: 1px solid #4CAF50;
+        }
+        .error {
+            background: #4a2a2a;
+            color: #ff6b6b;
+            border: 1px solid #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖼️ Image Converter</h1>
+        <p style="text-align: center; color: #ccc; margin-bottom: 30px;">
+            Convert PNG images to JPG format with dark theme styling
+        </p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📁 Drag & drop your image here or click to select</p>
+            <p style="font-size: 14px; color: #999; margin-top: 10px;">
+                Supports PNG, JPG, GIF, WebP formats
+            </p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="preview" id="preview" style="display: none;">
+            <h3>Preview:</h3>
+            <img id="previewImg" alt="Preview">
+        </div>
+        
+        <div style="text-align: center;">
+            <button class="btn" id="convertBtn" disabled>Convert to JPG</button>
+            <button class="btn" id="downloadBtn" disabled>Download JPG</button>
+        </div>
+        
+        <div id="status"></div>
+        
+        <div class="download-area" id="downloadArea" style="display: none;">
+            <h3>✅ Conversion Complete!</h3>
+            <p>Your image has been converted to JPG format.</p>
+            <p><strong>File size:</strong> <span id="fileSize"></span></p>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const convertBtn = document.getElementById('convertBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const status = document.getElementById('status');
+        const downloadArea = document.getElementById('downloadArea');
+        const fileSize = document.getElementById('fileSize');
+        
+        let originalFile = null;
+        let convertedBlob = null;
+        
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showStatus('Please select a valid image file.', 'error');
+                return;
+            }
+            
+            originalFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                preview.style.display = 'block';
+                convertBtn.disabled = false;
+                showStatus(`Image loaded: ${file.name} (${formatFileSize(file.size)})`, 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function convertToJPG() {
+            if (!originalFile) return;
+            
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'Converting...';
+            showStatus('Converting image to JPG format...', 'success');
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                // Set canvas dimensions
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // Fill with white background (JPG doesn't support transparency)
+                ctx.fillStyle = '#000000'; // Dark background for dark theme
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw the image
+                ctx.drawImage(img, 0, 0);
+                
+                // Convert to JPG
+                canvas.toBlob((blob) => {
+                    convertedBlob = blob;
+                    downloadBtn.disabled = false;
+                    convertBtn.textContent = 'Convert to JPG';
+                    convertBtn.disabled = false;
+                    
+                    fileSize.textContent = formatFileSize(blob.size);
+                    downloadArea.style.display = 'block';
+                    showStatus('✅ Conversion complete! Ready to download.', 'success');
+                }, 'image/jpeg', 0.9); // 90% quality
+            };
+            
+            img.src = URL.createObjectURL(originalFile);
+        }
+        
+        function downloadJPG() {
+            if (!convertedBlob) return;
+            
+            const url = URL.createObjectURL(convertedBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'phone-mockup.jpg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus('📥 Download started! Save the file as "phone-mockup.jpg" in your project folder.', 'success');
+        }
+        
+        function showStatus(message, type) {
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Event listeners
+        convertBtn.addEventListener('click', convertToJPG);
+        downloadBtn.addEventListener('click', downloadJPG);
+    </script>
+</body>
+</html>

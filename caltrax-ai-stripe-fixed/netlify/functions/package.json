@@ -1,0 +1,12 @@
+{
+  "name": "caltrax-ai-netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify Functions for CalTrax AI Stripe integration",
+  "main": "index.js",
+  "dependencies": {
+    "stripe": "^14.0.0"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
