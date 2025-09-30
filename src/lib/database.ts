@@ -14,9 +14,16 @@ export const supabase = supabaseUrl && supabaseKey
 
 // Log database status
 if (!supabase) {
-  console.warn('⚠️ Supabase not configured - database features disabled');
+  console.error('❌ CRITICAL: Supabase not configured - app will not function properly');
+  console.error('❌ Missing environment variables:');
+  console.error('   REACT_APP_SUPABASE_URL:', process.env.REACT_APP_SUPABASE_URL ? 'Present' : 'Missing');
+  console.error('   REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
+  console.error('   NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Present' : 'Missing');
+  console.error('   NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
 } else {
   console.log('✅ Supabase configured - database features enabled');
+  console.log('✅ Supabase URL:', supabaseUrl);
+  console.log('✅ Supabase Key:', supabaseKey ? 'Present' : 'Missing');
 }
 
 export interface User {

@@ -30,6 +30,7 @@ function AppContent() {
   const [hasPaid, setHasPaid] = useState(false);
   const [plan, setPlan] = useState(null);
   const [trialUsed, setTrialUsed] = useState(false);
+  const [error, setError] = useState(null);
 
   // Check if we're on the auth callback route
   useEffect(() => {
@@ -41,6 +42,21 @@ function AppContent() {
 
   // Track if we've already initialized to prevent re-initialization
   const hasInitialized = useRef(false);
+
+  // Check environment variables first
+  useEffect(() => {
+    console.log('🔍 === ENVIRONMENT CHECK ===');
+    console.log('REACT_APP_SUPABASE_URL:', process.env.REACT_APP_SUPABASE_URL ? 'Present' : 'Missing');
+    console.log('REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
+    console.log('REACT_APP_CLERK_PUBLISHABLE_KEY:', process.env.REACT_APP_CLERK_PUBLISHABLE_KEY ? 'Present' : 'Missing');
+    
+    if (!process.env.REACT_APP_SUPABASE_URL || !process.env.REACT_APP_SUPABASE_ANON_KEY) {
+      setError('Missing Supabase environment variables. Please check your Vercel configuration.');
+      setCurrentView('error');
+      setIsLoading(false);
+      return;
+    }
+  }, []);
 
   // Initialize app when Clerk loads
   useEffect(() => {
@@ -85,18 +101,12 @@ function AppContent() {
             }
           } catch (error) {
             console.error('❌ Error checking payment status:', error);
-            console.log('🔄 Falling back to local storage...');
+            console.error('❌ This is a critical error - app requires Supabase to function');
             
-            // Fallback to local storage
-            const localUser = simpleStorage.getItem('caltrax-user');
-            if (localUser?.profile) {
-              console.log('✅ Found local user profile, going to app');
-              setCurrentView('app');
-              setProfileCompleted(true);
-            } else {
-              console.log('📝 No local profile, going to profile setup');
-              setCurrentView('profile');
-            }
+            // Show error message instead of falling back to local storage
+            setError('Database connection failed. Please check your Supabase configuration.');
+            setCurrentView('error');
+            return;
           }
         } else {
           console.log('🚪 User not signed in, showing landing page');
@@ -337,6 +347,34 @@ function AppContent() {
   console.log('user:', user);
   console.log('profileCompleted:', profileCompleted);
   console.log('user?.profile:', user?.profile);
+  console.log('error:', error);
+
+  // Show error screen
+  if (currentView === 'error') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-950 via-red-900 to-black flex items-center justify-center">
+        <div className="text-white text-center max-w-md mx-auto p-6">
+          <div className="text-red-400 text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold mb-4">Configuration Error</h1>
+          <p className="text-gray-300 mb-6">{error}</p>
+          <div className="text-sm text-gray-400">
+            <p>Please check your Vercel environment variables:</p>
+            <ul className="mt-2 text-left">
+              <li>• REACT_APP_SUPABASE_URL</li>
+              <li>• REACT_APP_SUPABASE_ANON_KEY</li>
+              <li>• REACT_APP_CLERK_PUBLISHABLE_KEY</li>
+            </ul>
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Prevent redirect if profile was just completed
   if (profileCompleted && currentView === 'landing') {
