@@ -2,11 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-// Prefer REACT_APP_* but fall back to NEXT_PUBLIC_*
-const supabaseUrl =
-  process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey =
-  process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
 export const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
@@ -18,33 +15,12 @@ if (!supabase) {
   console.error('❌ Missing environment variables:');
   console.error('   REACT_APP_SUPABASE_URL:', process.env.REACT_APP_SUPABASE_URL ? 'Present' : 'Missing');
   console.error('   REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
-  console.error('   NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Present' : 'Missing');
-  console.error('   NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
 } else {
   console.log('✅ Supabase configured - database features enabled');
-  console.log('✅ Supabase URL:', supabaseUrl);
-  console.log('✅ Supabase Key:', supabaseKey ? 'Present' : 'Missing');
-}
-
-export interface User {
-  id?: string;
-  clerk_user_id: string;
-  email: string;
-  has_paid: boolean;
-  plan: string | null;
-  payment_date: string | null;
-  trial_used: boolean;
-  trial_start_date: string | null;
-  customer_id: string | null;
-  subscription_id: string | null;
-  subscription_status: string | null;
-  profile_data: any | null;
-  created_at?: string;
-  updated_at?: string;
 }
 
 // Create or update user in database
-export async function createOrUpdateUser(userData: Partial<User>): Promise<User | null> {
+export async function createOrUpdateUser(userData) {
   if (!supabase) {
     console.warn('Supabase not configured, cannot create/update user');
     return null;
@@ -140,7 +116,7 @@ export async function createOrUpdateUser(userData: Partial<User>): Promise<User 
 }
 
 // Get user by Clerk user ID
-export async function getUserByClerkId(clerkUserId: string): Promise<User | null> {
+export async function getUserByClerkId(clerkUserId) {
   if (!supabase) {
     console.warn('Supabase not configured, cannot get user');
     return null;
@@ -160,7 +136,7 @@ export async function getUserByClerkId(clerkUserId: string): Promise<User | null
       setTimeout(() => reject(new Error('Database query timeout')), 10000)
     );
     
-    const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
     if (error) {
       if (error.code === 'PGRST116') { // No rows found
@@ -180,7 +156,7 @@ export async function getUserByClerkId(clerkUserId: string): Promise<User | null
 }
 
 // Check if user has used trial
-export async function hasUsedTrial(clerkUserId: string): Promise<boolean> {
+export async function hasUsedTrial(clerkUserId) {
   if (!supabase) {
     console.warn('Supabase not configured, allowing trial');
     return false;
@@ -196,17 +172,7 @@ export async function hasUsedTrial(clerkUserId: string): Promise<boolean> {
 }
 
 // Update user payment status
-export async function updateUserPayment(
-  clerkUserId: string, 
-  paymentData: {
-    has_paid: boolean;
-    plan: string;
-    payment_date: string;
-    customer_id?: string;
-    subscription_id?: string;
-    subscription_status?: string;
-  }
-): Promise<boolean> {
+export async function updateUserPayment(clerkUserId, paymentData) {
   if (!supabase) {
     console.warn('Supabase not configured, cannot update payment');
     return false;
@@ -239,7 +205,7 @@ export async function updateUserPayment(
 }
 
 // Mark trial as used
-export async function markTrialUsed(clerkUserId: string): Promise<boolean> {
+export async function markTrialUsed(clerkUserId) {
   if (!supabase) {
     console.warn('Supabase not configured, cannot mark trial used');
     return false;
@@ -268,10 +234,7 @@ export async function markTrialUsed(clerkUserId: string): Promise<boolean> {
 }
 
 // Get subscription status from Stripe
-export async function getSubscriptionStatus(customerId: string): Promise<{
-  hasActiveSubscription: boolean;
-  subscription: any;
-} | null> {
+export async function getSubscriptionStatus(customerId) {
   if (!customerId) {
     return { hasActiveSubscription: false, subscription: null };
   }

@@ -1,5 +1,5 @@
 // Payment service for tracking subscriptions and payment status
-import { createOrUpdateUser, getUserByClerkId, updateUserPayment, markTrialUsed, hasUsedTrial } from '../lib/database.ts';
+import { createOrUpdateUser, getUserByClerkId, updateUserPayment, markTrialUsed, hasUsedTrial } from '../lib/database.js';
 
 class PaymentService {
   // Check if user has active subscription

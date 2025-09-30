@@ -1,16 +1,16 @@
 // Macro tracking storage utilities
-import { addFoodEntry as addFoodEntryToDB } from '../lib/dailyTracking.ts';
+import { addFoodEntry as addFoodEntryToDB } from '../lib/dailyTracking';
 
 export const MACRO_STORAGE_KEY = 'caltrax-macros';
 
 export const getTodayDate = () => {
-  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  return new Date().toISOString().split('T')[0];
 };
 
 export const getWeekStart = (date = new Date()) => {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
   return d.toISOString().split('T')[0];
 };
@@ -78,8 +78,6 @@ export const addFoodEntry = async (foodData, clerkUserId = null) => {
     } catch (error) {
       console.error('❌ Failed to save food entry to database:', error);
     }
-  } else {
-    console.log('⚠️ No Clerk user ID - saving to local storage only');
   }
   
   return entry;
@@ -105,7 +103,6 @@ export const getWeekMacros = () => {
   const macroData = getMacroData();
   const weekData = [];
   
-  // Get 7 days starting from week start
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + i);
@@ -162,5 +159,3 @@ export const deleteFoodEntry = (date, entryId) => {
   saveMacroData(macroData);
   return true;
 };
-
-
