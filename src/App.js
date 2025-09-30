@@ -32,6 +32,21 @@ function AppContent() {
   const [trialUsed, setTrialUsed] = useState(false);
   const [error, setError] = useState(null);
 
+  // Track if we've already initialized to prevent re-initialization
+  const hasInitialized = useRef(false);
+
+  // Fallback to prevent infinite loading if Clerk fails to load
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!isLoaded) {
+        setError('Authentication timed out. Please refresh the page.');
+        setCurrentView('error');
+        setIsLoading(false);
+      }
+    }, 10000); // 10 seconds
+    return () => clearTimeout(timeout);
+  }, [isLoaded]);
+  
   // Check if we're on the auth callback route
   useEffect(() => {
     if (window.location.pathname === '/auth/callback') {
@@ -39,9 +54,6 @@ function AppContent() {
       setIsLoading(false);
     }
   }, []);
-
-  // Track if we've already initialized to prevent re-initialization
-  const hasInitialized = useRef(false);
 
   // Check environment variables first
   useEffect(() => {
@@ -51,7 +63,7 @@ function AppContent() {
     console.log('REACT_APP_CLERK_PUBLISHABLE_KEY:', process.env.REACT_APP_CLERK_PUBLISHABLE_KEY ? 'Present' : 'Missing');
     
     if (!process.env.REACT_APP_SUPABASE_URL || !process.env.REACT_APP_SUPABASE_ANON_KEY) {
-      setError('Missing Supabase environment variables. Please check your Vercel configuration.');
+      setError('Missing Supabase environment variables. Please check your configuration.');
       setCurrentView('error');
       setIsLoading(false);
       return;
@@ -62,6 +74,12 @@ function AppContent() {
   useEffect(() => {
     if (!isLoaded) {
       console.log('⏳ Clerk still loading...');
+      return;
+    }
+
+    // Prevent re-initialization
+    if (hasInitialized.current) {
+      console.log('⏭️ App already initialized, skipping...');
       return;
     }
 
@@ -112,9 +130,12 @@ function AppContent() {
           console.log('🚪 User not signed in, showing landing page');
           setCurrentView('landing');
         }
+        
+        hasInitialized.current = true;
       } catch (error) {
         console.error('Error initializing app:', error);
         setCurrentView('landing');
+        hasInitialized.current = true;
       } finally {
         setIsLoading(false);
       }
@@ -122,6 +143,22 @@ function AppContent() {
 
     initializeApp();
   }, [isLoaded, isSignedIn, user]);
+
+  // FIXED: Move view correction logic to useEffect to prevent infinite re-renders
+  useEffect(() => {
+    // Prevent redirect if profile was just completed
+    if (profileCompleted && currentView === 'landing') {
+      console.log('Preventing redirect - profile completed but view is landing, forcing to app');
+      setCurrentView('app');
+    }
+
+    // Additional safety check - if user has profile but view is not app, fix it
+    if (user?.unsafeMetadata?.caltraxProfile && currentView !== 'app' && currentView !== 'profile' && currentView !== 'dashboard' && currentView !== 'mealplan' && currentView !== 'workout') {
+      console.log('User has profile but wrong view, correcting to app view');
+      setCurrentView('app');
+      setProfileCompleted(true);
+    }
+  }, [profileCompleted, currentView, user]);
 
   const handleGetStarted = () => {
     setCurrentView('signup');
@@ -134,10 +171,6 @@ function AppContent() {
   const handleSignIn = async (userData) => {
     console.log('🔍 === HANDLE SIGN IN DEBUG ===');
     console.log('handleSignIn - userData:', userData);
-    console.log('handleSignIn - userData.profile:', userData?.profile);
-    console.log('handleSignIn - userData.profile type:', typeof userData?.profile);
-    console.log('handleSignIn - userData.profile.calories:', userData?.profile?.calories);
-    console.log('handleSignIn - userData.profile.macros:', userData?.profile?.macros);
     
     // Double-check that the user data is complete
     if (!userData || !userData.email) {
@@ -145,47 +178,20 @@ function AppContent() {
       return;
     }
     
-    // If user doesn't have profile data, try to reload it from Supabase
-    if (!userData.profile && userData.id) {
-      console.log('🔍 No profile data found, attempting to reload from Supabase...');
-      try {
-        const freshUser = await authService.getCurrentUser();
-        if (freshUser && freshUser.profile) {
-          console.log('✅ Reloaded profile from Supabase:', freshUser.profile);
-          userData.profile = freshUser.profile;
-          // Update local storage with fresh data
-          simpleStorage.setItem('caltrax-user', userData);
-        }
-      } catch (error) {
-        console.error('❌ Failed to reload profile from Supabase:', error);
-      }
-    }
-    
-    // Verify the data is properly stored
-    const verifyStored = simpleStorage.getItem('caltrax-user');
-    console.log('handleSignIn - Verifying stored data:', verifyStored);
-    console.log('handleSignIn - Stored data matches:', JSON.stringify(verifyStored) === JSON.stringify(userData));
-    
-    // User data is handled by Clerk, no need to set it manually
-    
     // Check if user has completed profile
     if (userData.profile) {
       console.log('User has profile, going to app');
-      console.log('🔍 Setting currentView to app and profileCompleted to true');
       setCurrentView('app');
       setProfileCompleted(true);
     } else {
       console.log('User needs to complete profile, going to profile page');
-      console.log('🔍 Setting currentView to profile and profileCompleted to false');
       setCurrentView('profile');
       setProfileCompleted(false);
     }
-    console.log('🔍 === END HANDLE SIGN IN DEBUG ===');
   };
 
   const handleSignup = (userData) => {
     console.log('handleSignup called with:', userData);
-    // User data is handled by Clerk, no need to set it manually
     // Check if user has completed profile
     if (userData.profile) {
       console.log('User has profile, going to app');
@@ -199,31 +205,29 @@ function AppContent() {
   const handleProfileComplete = async (updatedUser) => {
     console.log('🔍 === HANDLE PROFILE COMPLETE DEBUG START ===');
     console.log('handleProfileComplete called with:', updatedUser);
-    console.log('Current view before profile complete:', currentView);
-    console.log('Current user before profile complete:', user);
-    console.log('Profile completed flag before:', profileCompleted);
     
     try {
       // Save profile to Clerk metadata if user is signed in
       if (user && user.id) {
         console.log('💾 Saving profile to Clerk metadata...');
-        await paymentService.createOrUpdateUserProfile(user.id, user.emailAddresses?.[0]?.emailAddress || user.primaryEmailAddress?.emailAddress || '', updatedUser.profile);
+        await paymentService.createOrUpdateUserProfile(
+          user.id, 
+          user.emailAddresses?.[0]?.emailAddress || user.primaryEmailAddress?.emailAddress || '', 
+          updatedUser.profile
+        );
         console.log('✅ Profile saved to Clerk metadata');
       }
       
-      // Update user and view immediately
-      // User data is handled by Clerk, no need to set it manually
-      setCurrentView('app');
+      // Update view immediately
       setProfileCompleted(true);
+      setCurrentView('app');
       
-      console.log('Profile complete - set to app view and profileCompleted flag');
-      console.log('Updated user:', updatedUser);
+      console.log('Profile complete - set to app view');
     } catch (error) {
       console.error('❌ Error saving profile to Clerk:', error);
       // Still update UI even if Clerk save fails
-      // User data is handled by Clerk, no need to set it manually
-      setCurrentView('app');
       setProfileCompleted(true);
+      setCurrentView('app');
     }
     
     console.log('🔍 === HANDLE PROFILE COMPLETE DEBUG END ===');
@@ -231,7 +235,6 @@ function AppContent() {
 
   const handleLogout = async () => {
     console.log('🔍 === LOGOUT DEBUG START ===');
-    console.log('🔍 Logout called - this should not happen after profile completion!');
     
     try {
       // Sign out from Supabase
@@ -246,20 +249,18 @@ function AppContent() {
     simpleStorage.removeItem('caltrax-signed-up');
     
     // Reset app state
-    // User data is handled by Clerk, no need to set it manually
     setProfileCompleted(false);
     setCurrentView('landing');
     setHasPaid(false);
     setPlan(null);
     setTrialUsed(false);
+    hasInitialized.current = false;
     
     console.log('✅ User logged out - redirected to landing page');
-    console.log('🔍 === LOGOUT DEBUG END ===');
   };
 
   const handleEmailVerified = (userData) => {
     console.log('✅ Email verified, setting user and redirecting to app');
-    // User data is handled by Clerk, no need to set it manually
     setCurrentView('app');
     setProfileCompleted(true);
   };
@@ -270,11 +271,9 @@ function AppContent() {
   };
 
   const handleShowAdmin = () => {
-    // Check admin access before allowing navigation
     if (hasAdminAccess()) {
       setCurrentView('admin');
     } else {
-      // Show admin login modal
       setShowAdminLogin(true);
     }
   };
@@ -289,20 +288,7 @@ function AppContent() {
   };
 
   const handleShowDashboard = () => {
-    console.log('🔍 === HANDLE SHOW DASHBOARD DEBUG ===');
-    console.log('Current user before dashboard:', user);
-    
-    // Reload user data from storage to ensure it's fresh
-    const storedUser = simpleStorage.getItem('caltrax-user');
-    console.log('Stored user data:', storedUser);
-    
-    if (storedUser && storedUser !== user) {
-      console.log('Updating user data from storage');
-      // User data is handled by Clerk, no need to set it manually
-    }
-    
     setCurrentView('dashboard');
-    console.log('🔍 === END HANDLE SHOW DASHBOARD DEBUG ===');
   };
 
   const handleBackToApp = () => {
@@ -346,7 +332,6 @@ function AppContent() {
   console.log('currentView:', currentView);
   console.log('user:', user);
   console.log('profileCompleted:', profileCompleted);
-  console.log('user?.profile:', user?.profile);
   console.log('error:', error);
 
   // Show error screen
@@ -358,7 +343,7 @@ function AppContent() {
           <h1 className="text-2xl font-bold mb-4">Configuration Error</h1>
           <p className="text-gray-300 mb-6">{error}</p>
           <div className="text-sm text-gray-400">
-            <p>Please check your Vercel environment variables:</p>
+            <p>Please check your environment variables:</p>
             <ul className="mt-2 text-left">
               <li>• REACT_APP_SUPABASE_URL</li>
               <li>• REACT_APP_SUPABASE_ANON_KEY</li>
@@ -374,19 +359,6 @@ function AppContent() {
         </div>
       </div>
     );
-  }
-
-  // Prevent redirect if profile was just completed
-  if (profileCompleted && currentView === 'landing') {
-    console.log('Preventing redirect - profile completed but view is landing, forcing to app');
-    setCurrentView('app');
-  }
-
-  // Additional safety check - if user has profile but view is not app, fix it
-  if (user?.profile && currentView !== 'app' && currentView !== 'profile') {
-    console.log('User has profile but wrong view, correcting to app view');
-    setCurrentView('app');
-    setProfileCompleted(true);
   }
 
   return (
@@ -431,21 +403,18 @@ function AppContent() {
           user={user}
         />
       )}
-      {/* Auth Callback - Email Verification */}
       {currentView === 'auth-callback' && (
         <AuthCallback
           onVerified={handleEmailVerified}
           onError={handleEmailVerificationError}
         />
       )}
-
       {currentView === 'admin' && hasAdminAccess() && (
         <AdminDashboard 
           onBack={() => setCurrentView('app')}
         />
       )}
       
-      {/* Admin Login Modal */}
       {showAdminLogin && (
         <AdminLogin
           onSuccess={handleAdminLoginSuccess}
@@ -453,15 +422,12 @@ function AppContent() {
         />
       )}
       
-      {/* Subscription Management Modal */}
       {showSubscriptionManagement && (
         <SubscriptionManagement
           onClose={() => setShowSubscriptionManagement(false)}
           user={user}
         />
       )}
-      
-      
     </div>
   );
 }
@@ -490,4 +456,3 @@ function App() {
 }
 
 export default App;
-// Deployment trigger - Mon Sep 29 18:42:54 PDT 2025
