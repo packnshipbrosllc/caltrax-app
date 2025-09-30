@@ -1,23 +1,5 @@
 // Database functions for Supabase
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-
-export const supabase = supabaseUrl && supabaseKey 
-  ? createClient(supabaseUrl, supabaseKey)
-  : null;
-
-// Log database status
-if (!supabase) {
-  console.error('❌ CRITICAL: Supabase not configured - app will not function properly');
-  console.error('❌ Missing environment variables:');
-  console.error('   REACT_APP_SUPABASE_URL:', process.env.REACT_APP_SUPABASE_URL ? 'Present' : 'Missing');
-  console.error('   REACT_APP_SUPABASE_ANON_KEY:', process.env.REACT_APP_SUPABASE_ANON_KEY ? 'Present' : 'Missing');
-} else {
-  console.log('✅ Supabase configured - database features enabled');
-}
+import { supabase } from '../config/supabase';
 
 // Create or update user in database
 export async function createOrUpdateUser(userData) {

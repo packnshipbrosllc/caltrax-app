@@ -1,5 +1,5 @@
 // Daily tracking functions for food entries
-import { supabase } from './database';
+import { supabase } from '../config/supabase';
 
 // Add food entry to database
 export async function addFoodEntry(clerkUserId, foodData) {
