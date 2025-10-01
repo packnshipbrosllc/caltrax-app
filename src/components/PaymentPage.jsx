@@ -13,19 +13,52 @@ export default function PaymentPage({ onPaymentComplete, user }) {
 
   const plans = [
     {
-      id: 'basic',
-      name: 'Pro Monthly',
-      price: '$9.99',
-      priceId: 'price_YOUR_STRIPE_PRICE_ID', // Replace with your actual Stripe Price ID
+      id: 'trial',
+      name: 'Free Trial',
+      price: 'Free',
+      priceId: null, // No Stripe price ID for trial
+      period: '3 days',
+      features: [
+        'Full access to all features',
+        'Unlimited food scans',
+        'AI-powered nutrition analysis',
+        'Macro tracking dashboard',
+        'No credit card required'
+      ],
+      trial: true,
+      popular: false
+    },
+    {
+      id: 'monthly',
+      name: 'Monthly Plan',
+      price: '$5',
+      priceId: 'price_1QABC123DEF456GHI', // Replace with your actual monthly Stripe Price ID
       period: '/month',
       features: [
         'Unlimited food scans',
         'AI-powered nutrition analysis',
         'Daily macro tracking',
         'Personalized meal plans',
-        'Custom workout plans',
         'Health insights & trends',
-        'Priority support'
+        'Email support'
+      ],
+      popular: false
+    },
+    {
+      id: 'yearly',
+      name: 'Yearly Plan',
+      price: '$30',
+      priceId: 'price_1QXYZ789ABC123DEF', // Replace with your actual yearly Stripe Price ID
+      period: '/year',
+      originalPrice: '$60',
+      discount: '50% OFF',
+      features: [
+        'Everything in Monthly',
+        'Priority support',
+        'Advanced analytics',
+        'Custom meal plans',
+        'Workout integration',
+        'Save $30 per year'
       ],
       popular: true
     }
@@ -41,6 +74,19 @@ export default function PaymentPage({ onPaymentComplete, user }) {
     setError(null);
 
     try {
+      // Handle free trial
+      if (plan.trial) {
+        // For free trial, just proceed to profile setup
+        console.log('Starting free trial for user:', user.id);
+        onPaymentComplete();
+        return;
+      }
+
+      // Handle paid plans
+      if (!plan.priceId) {
+        throw new Error('Price ID not configured for this plan');
+      }
+
       // Call your Vercel API to create checkout session
       const response = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
@@ -108,7 +154,7 @@ export default function PaymentPage({ onPaymentComplete, user }) {
         )}
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-1 gap-8 max-w-md mx-auto">
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.id}
@@ -152,7 +198,11 @@ export default function PaymentPage({ onPaymentComplete, user }) {
                   <Button
                     onClick={() => handleSubscribe(plan)}
                     disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-lg py-6"
+                    className={`w-full text-lg py-6 ${
+                      plan.trial 
+                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                        : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                    }`}
                   >
                     {isLoading ? (
                       <>
@@ -161,8 +211,17 @@ export default function PaymentPage({ onPaymentComplete, user }) {
                       </>
                     ) : (
                       <>
-                        <CreditCard className="w-5 h-5 mr-2" />
-                        Subscribe Now
+                        {plan.trial ? (
+                          <>
+                            <Check className="w-5 h-5 mr-2" />
+                            Start Free Trial
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-5 h-5 mr-2" />
+                            Subscribe Now
+                          </>
+                        )}
                       </>
                     )}
                   </Button>
