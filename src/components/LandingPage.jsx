@@ -1,9 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Brain, Zap, Shield, BarChart3, Smartphone, ArrowRight, Utensils, Dumbbell } from 'lucide-react';
+import { Camera, Brain, Zap, Shield, BarChart3, Smartphone, ArrowRight, Utensils, Dumbbell, X } from 'lucide-react';
 import { Button } from './ui/Button';
+import { SignIn, SignUp, useAuth } from '@clerk/clerk-react';
 
 export default function LandingPage({ onGetStarted, onShowSignIn }) {
+  const { isSignedIn } = useAuth();
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
+  // Close modals when user signs in
+  useEffect(() => {
+    if (isSignedIn) {
+      // User just signed in via Clerk, close modals
+      setShowSignIn(false);
+      setShowSignUp(false);
+    }
+  }, [isSignedIn]);
+
   const features = [
     {
       icon: Camera,
@@ -61,14 +74,14 @@ export default function LandingPage({ onGetStarted, onShowSignIn }) {
             </div>
             <div className="flex gap-4">
               <Button 
-                onClick={onGetStarted}
+                onClick={() => setShowSignUp(true)}
                 className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
               >
                 Get Started
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <Button 
-                onClick={onShowSignIn}
+                onClick={() => setShowSignIn(true)}
                 variant="outline"
                 className="border-white text-white hover:bg-white hover:text-gray-900"
               >
@@ -123,7 +136,7 @@ export default function LandingPage({ onGetStarted, onShowSignIn }) {
               className="flex flex-col sm:flex-row gap-4 justify-center items-center"
             >
               <Button 
-                onClick={onGetStarted}
+                onClick={() => setShowSignUp(true)}
                 size="lg"
                 className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-lg px-8 py-4 shadow-2xl"
               >
@@ -200,7 +213,7 @@ export default function LandingPage({ onGetStarted, onShowSignIn }) {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button 
-                onClick={onGetStarted}
+                onClick={() => setShowSignUp(true)}
                 size="lg"
                 className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-lg px-8 py-4"
               >
@@ -208,7 +221,7 @@ export default function LandingPage({ onGetStarted, onShowSignIn }) {
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
               <Button 
-                onClick={onShowSignIn}
+                onClick={() => setShowSignIn(true)}
                 variant="outline"
                 size="lg"
                 className="border-white text-white hover:bg-white hover:text-gray-900 text-lg px-8 py-4"
@@ -239,6 +252,73 @@ export default function LandingPage({ onGetStarted, onShowSignIn }) {
           </div>
         </div>
       </footer>
+
+      {/* Clerk Authentication Modals */}
+      {showSignIn && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-700 max-w-md w-full relative">
+            <button
+              onClick={() => setShowSignIn(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="p-6">
+              <SignIn 
+                appearance={{
+                  elements: {
+                    rootBox: "w-full",
+                    card: "bg-transparent shadow-none border-none",
+                    headerTitle: "text-white text-2xl font-bold",
+                    headerSubtitle: "text-zinc-400",
+                    socialButtonsBlockButton: "bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700",
+                    formButtonPrimary: "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700",
+                    formFieldInput: "bg-zinc-800 border-zinc-700 text-white",
+                    footerActionLink: "text-blue-400 hover:text-blue-300",
+                    identityPreviewText: "text-zinc-300",
+                    formFieldLabel: "text-zinc-300"
+                  }
+                }}
+                routing="hash"
+                afterSignInUrl="#"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSignUp && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 rounded-2xl border border-zinc-700 max-w-md w-full relative">
+            <button
+              onClick={() => setShowSignUp(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white z-10"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="p-6">
+              <SignUp 
+                appearance={{
+                  elements: {
+                    rootBox: "w-full",
+                    card: "bg-transparent shadow-none border-none",
+                    headerTitle: "text-white text-2xl font-bold",
+                    headerSubtitle: "text-zinc-400",
+                    socialButtonsBlockButton: "bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700",
+                    formButtonPrimary: "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700",
+                    formFieldInput: "bg-zinc-800 border-zinc-700 text-white",
+                    footerActionLink: "text-blue-400 hover:text-blue-300",
+                    identityPreviewText: "text-zinc-300",
+                    formFieldLabel: "text-zinc-300"
+                  }
+                }}
+                routing="hash"
+                afterSignUpUrl="#"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

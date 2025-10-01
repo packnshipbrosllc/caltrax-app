@@ -159,99 +159,42 @@ export default function UserProfile({ onComplete, user }) {
       const calories = calculateCalories();
       const macros = calories ? calculateMacros(calories) : null;
       
+      if (!calories || !macros) {
+        console.error('❌ Failed to calculate nutrition goals');
+        alert('Please fill in all required fields');
+        return;
+      }
+      
       const completeProfile = {
-        ...profileData,
-        calories,
-        macros,
+        height: profileData.height,
+        weight: profileData.weight,
+        age: profileData.age,
+        gender: profileData.gender,
+        activityLevel: profileData.activityLevel,
+        goals: profileData.goals,
+        dietaryRestrictions: profileData.dietaryRestrictions,
+        calories: calories,
+        macros: {
+          protein: macros.protein,
+          fat: macros.fat,
+          carbs: macros.carbs
+        },
         completedAt: new Date().toISOString()
       };
 
-      // Update user data
-      const updatedUser = { ...user, profile: completeProfile };
-      
-      console.log('Profile completed - updatedUser:', updatedUser);
-      
-      // Save to Supabase first
-      const saveToSupabase = async () => {
-        try {
-          if (user?.id) {
-            console.log('Saving profile to Supabase...', completeProfile);
-            console.log('Profile data structure:', {
-              calories: completeProfile.calories,
-              macros: completeProfile.macros,
-              height: completeProfile.height,
-              weight: completeProfile.weight,
-              age: completeProfile.age,
-              gender: completeProfile.gender,
-              activityLevel: completeProfile.activityLevel,
-              goals: completeProfile.goals
-            });
-            await authService.updateProfile(user.id, completeProfile);
-            console.log('✅ Profile saved to Supabase successfully');
-          } else {
-            console.log('❌ No user ID found, cannot save to Supabase');
-          }
-        } catch (error) {
-          console.error('❌ Failed to save profile to Supabase:', error);
-        }
+      console.log('✅ Profile completed:', completeProfile);
+      console.log('Calories:', completeProfile.calories);
+      console.log('Macros:', completeProfile.macros);
+
+      // Create updated user object
+      const updatedUser = {
+        ...user,
+        profile: completeProfile
       };
       
-      // Save to simple storage
-      const saveSuccess = simpleStorage.setItem('caltrax-user', updatedUser);
-      const signupSuccess = simpleStorage.setItem('caltrax-signed-up', true);
-      
-      console.log('Profile data saved to storage - success:', saveSuccess, signupSuccess);
-      console.log('Profile data - updatedUser:', updatedUser);
-      console.log('Profile data - profile.calories:', updatedUser.profile?.calories);
-      
-      // Verify the data was saved (important for mobile)
-      const savedUser = simpleStorage.getItem('caltrax-user');
-      console.log('Verification - saved user data:', savedUser);
-      
-      // Save to Supabase
-      saveToSupabase();
-      
-      // Also save profile to server for cross-device functionality
-      const saveProfileToServer = async () => {
-        try {
-          const serverResponse = await fetch('/.netlify/functions/save-user', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: user.email,
-              password: user.password, // Keep existing password
-              profile: completeProfile, // Save the completed profile
-              plan: user.plan,
-              subscriptionData: user.subscriptionData || {}
-            })
-          });
-          
-          if (serverResponse.ok) {
-            console.log('✅ Profile saved to server for cross-device access');
-          } else {
-            console.log('⚠️ Failed to save profile to server');
-          }
-        } catch (serverError) {
-          console.log('⚠️ Server profile save failed:', serverError.message);
-        }
-      };
-      
-      saveProfileToServer();
-      
-      // Safari iOS needs more time for storage operations
-      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const delay = (isSafari && isIOS) ? 300 : 100;
-      
-      // Add a delay for mobile browsers, especially Safari iOS
-      setTimeout(() => {
-        console.log('🔍 === USERPROFILE CALLING ONCOMPLETE ===');
-        console.log('Calling onComplete with:', updatedUser);
-        onComplete(updatedUser);
-        console.log('🔍 === USERPROFILE ONCOMPLETE CALLED ===');
-      }, delay);
+      // Call parent's onComplete handler
+      console.log('🔍 Calling onComplete with profile data');
+      onComplete(updatedUser);
     }
   };
 

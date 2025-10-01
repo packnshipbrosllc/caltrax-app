@@ -127,33 +127,13 @@ export default function FoodLensDemo({
   async function analyzeFrame() {
     if (isAnalyzing || !streaming) return;
     
-    // TEMPORARY: Mock analysis since backend isn't deployed
-    // TODO: Replace with actual backend API call when deployed
     const dataUrl = await captureFrameBase64();
     if (!dataUrl) return;
     setIsAnalyzing(true);
 
     try {
-      // Mock data for development - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
-      const mockResult = {
-        name: "Sample Food",
-        nutrition: {
-          calories: 250,
-          protein_g: 15,
-          fat_g: 8,
-          carbs_g: 30
-        },
-        pros: ["Good protein content", "Moderate calories"],
-        cons: ["Could be lower in fat"],
-        confidence: 0.85,
-        health_score: 7
-      };
-      
-      /* 
-      // Real API call (uncomment when backend is deployed):
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/nutrition/analyze`, {
+      // Real API call to Vercel serverless function
+      const response = await fetch('/api/nutrition/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -165,15 +145,15 @@ export default function FoodLensDemo({
       });
 
       if (!response.ok) {
-        throw new Error('Analysis failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Analysis failed');
       }
 
-      const mockResult = await response.json();
-      */
+      const analysisResult = await response.json();
 
-      const calculatedScore = mockResult.health_score || computeHealthScore(mockResult.nutrition);
+      const calculatedScore = analysisResult.health_score || computeHealthScore(analysisResult.nutrition);
       const stamped = {
-        ...mockResult,
+        ...analysisResult,
         score: calculatedScore,
         lastUpdated: new Date().toLocaleTimeString(),
       };
@@ -185,7 +165,7 @@ export default function FoodLensDemo({
       }
 
       // Voice output
-      const ttsText = `${mockResult.name}. Calories ${mockResult.nutrition.calories}. Protein ${mockResult.nutrition.protein_g} grams. Fat ${mockResult.nutrition.fat_g} grams. Carbs ${mockResult.nutrition.carbs_g} grams. Health score ${calculatedScore} out of 10.`;
+      const ttsText = `${analysisResult.name}. Calories ${analysisResult.nutrition.calories}. Protein ${analysisResult.nutrition.protein_g} grams. Fat ${analysisResult.nutrition.fat_g} grams. Carbs ${analysisResult.nutrition.carbs_g} grams. Health score ${calculatedScore} out of 10.`;
       speakWithBrowserTTS(ttsText);
 
     } catch (error) {

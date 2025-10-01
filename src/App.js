@@ -6,6 +6,8 @@ import SimpleSignupPage from './components/SimpleSignupPage';
 import UserSignIn from './components/UserSignIn';
 import MacroDashboard from './components/MacroDashboard';
 import UserProfile from './components/UserProfile';
+import PaymentPage from './components/PaymentPage';
+import SuccessPage from './components/SuccessPage';
 import MealPlan from './components/MealPlan';
 import WorkoutPlan from './components/WorkoutPlan';
 import AdminDashboard from './components/AdminDashboard';
@@ -73,69 +75,56 @@ function AppContent() {
   // Initialize app when Clerk loads
   useEffect(() => {
     if (!isLoaded) {
-      console.log('⏳ Clerk still loading...');
+      console.log('Clerk still loading...');
       return;
     }
 
-    // Prevent re-initialization
-    if (hasInitialized.current) {
-      console.log('⏭️ App already initialized, skipping...');
-      return;
-    }
-
-    console.log('🔍 === CLERK LOADED ===');
+    console.log('=== CLERK LOADED ===');
     console.log('isSignedIn:', isSignedIn);
     console.log('user:', user);
 
     const initializeApp = async () => {
       try {
         if (isSignedIn && user) {
-          console.log('✅ User signed in with Clerk:', user.id);
+          // Check URL for success page
+          const urlParams = new URLSearchParams(window.location.search);
+          const sessionId = urlParams.get('session_id');
           
-          // Check payment status from database with timeout
-          try {
-            console.log('🔍 Checking payment status...');
-            const paymentStatusPromise = paymentService.checkPaymentStatus(user.id);
-            const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Payment check timeout')), 5000)
-            );
-            
-            const paymentStatus = await Promise.race([paymentStatusPromise, timeoutPromise]);
-            console.log('💳 Payment status:', paymentStatus);
-            
-            setHasPaid(paymentStatus.hasPaid);
-            setPlan(paymentStatus.plan);
-            setTrialUsed(paymentStatus.trialUsed);
-            
-            // Check if user has completed profile
-            const profileData = user.unsafeMetadata?.caltraxProfile;
-            if (profileData) {
-              console.log('✅ User has profile, going to app');
-              setCurrentView('app');
-              setProfileCompleted(true);
-            } else {
-              console.log('📝 User needs profile setup');
-              setCurrentView('profile');
-            }
-          } catch (error) {
-            console.error('❌ Error checking payment status:', error);
-            console.error('❌ This is a critical error - app requires Supabase to function');
-            
-            // Show error message instead of falling back to local storage
-            setError('Database connection failed. Please check your Supabase configuration.');
-            setCurrentView('error');
+          if (sessionId) {
+            // User just completed payment
+            console.log('Payment completed, showing success page');
+            setCurrentView('success');
             return;
           }
+
+          // Check subscription status
+          const hasPaid = user.unsafeMetadata?.hasPaid;
+          const profile = user.unsafeMetadata?.caltraxProfile;
+          const onboardingComplete = user.unsafeMetadata?.onboardingComplete;
+          
+          console.log('User status:', { hasPaid, onboardingComplete });
+          
+          if (!hasPaid) {
+            // User signed up but hasn't paid
+            console.log('User needs to pay first');
+            setCurrentView('payment');
+          } else if (!onboardingComplete || !profile) {
+            // User paid but hasn't completed profile
+            console.log('User needs profile');
+            setCurrentView('profile');
+          } else {
+            // User is fully set up
+            console.log('User ready, going to app');
+            setCurrentView('app');
+            setProfileCompleted(true);
+          }
         } else {
-          console.log('🚪 User not signed in, showing landing page');
+          console.log('No user signed in, showing landing');
           setCurrentView('landing');
         }
-        
-        hasInitialized.current = true;
       } catch (error) {
-        console.error('Error initializing app:', error);
+        console.error('Init error:', error);
         setCurrentView('landing');
-        hasInitialized.current = true;
       } finally {
         setIsLoading(false);
       }
@@ -207,25 +196,67 @@ function AppContent() {
     console.log('handleProfileComplete called with:', updatedUser);
     
     try {
-      // Save profile to Clerk metadata if user is signed in
-      if (user && user.id) {
-        console.log('💾 Saving profile to Clerk metadata...');
+      if (!user) {
+        console.error('❌ No Clerk user available');
+        return;
+      }
+
+      const profileData = updatedUser.profile;
+      
+      if (!profileData || !profileData.calories || !profileData.macros) {
+        console.error('❌ Invalid profile data:', profileData);
+        return;
+      }
+
+      console.log('💾 Saving profile to Clerk metadata:', profileData);
+
+      // Save to Clerk's unsafeMetadata
+      await user.update({
+        unsafeMetadata: {
+          caltraxProfile: {
+            height: profileData.height,
+            weight: profileData.weight,
+            age: profileData.age,
+            gender: profileData.gender,
+            activityLevel: profileData.activityLevel,
+            goals: profileData.goals,
+            dietaryRestrictions: profileData.dietaryRestrictions,
+            calories: profileData.calories,
+            macros: {
+              protein: profileData.macros.protein,
+              fat: profileData.macros.fat,
+              carbs: profileData.macros.carbs
+            },
+            completedAt: profileData.completedAt
+          },
+          onboardingComplete: true
+        }
+      });
+
+      console.log('✅ Profile saved to Clerk metadata successfully');
+      console.log('Profile calories:', profileData.calories);
+      console.log('Profile macros:', profileData.macros);
+
+      // Also save to Supabase
+      try {
         await paymentService.createOrUpdateUserProfile(
           user.id, 
-          user.emailAddresses?.[0]?.emailAddress || user.primaryEmailAddress?.emailAddress || '', 
-          updatedUser.profile
+          user.emailAddresses?.[0]?.emailAddress || user.primaryEmailAddress?.emailAddress, 
+          profileData
         );
-        console.log('✅ Profile saved to Clerk metadata');
+        console.log('✅ Profile saved to Supabase');
+      } catch (dbError) {
+        console.error('⚠️ Supabase save failed (non-critical):', dbError);
       }
       
-      // Update view immediately
+      // Update UI state
       setProfileCompleted(true);
       setCurrentView('app');
       
-      console.log('Profile complete - set to app view');
+      console.log('✅ Profile complete - redirecting to app');
     } catch (error) {
-      console.error('❌ Error saving profile to Clerk:', error);
-      // Still update UI even if Clerk save fails
+      console.error('❌ Error saving profile:', error);
+      // Still proceed to app even if save fails
       setProfileCompleted(true);
       setCurrentView('app');
     }
@@ -367,6 +398,17 @@ function AppContent() {
       {currentView === 'landing' && <LandingPage onGetStarted={handleGetStarted} onShowSignIn={handleShowSignIn} />}
       {currentView === 'signup' && <SimpleSignupPage onSignup={handleSignup} onShowSignIn={handleShowSignIn} />}
       {currentView === 'signin' && <UserSignIn onSignIn={handleSignIn} onBackToSignup={() => setCurrentView('signup')} />}
+      {currentView === 'payment' && (
+        <PaymentPage 
+          user={user}
+        />
+      )}
+      {currentView === 'success' && (
+        <SuccessPage 
+          user={user}
+          onContinue={() => setCurrentView('profile')}
+        />
+      )}
       {currentView === 'profile' && (
         <UserProfile 
           onComplete={handleProfileComplete}

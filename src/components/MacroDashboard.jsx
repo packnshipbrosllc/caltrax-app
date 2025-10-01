@@ -53,21 +53,28 @@ export default function MacroDashboard({ onBack, onAddFood, onShowMealPlan, onSh
   useEffect(() => {
     if (!isLoaded) return;
     
-    if (user?.unsafeMetadata?.caltraxProfile) {
-      const profile = user.unsafeMetadata.caltraxProfile;
-      console.log('MacroDashboard - Loading profile from Clerk:', profile);
+    console.log('🔍 MacroDashboard - Loading user goals');
+    console.log('User object:', user);
+    console.log('User metadata:', user?.unsafeMetadata);
+    
+    // Get profile from Clerk metadata
+    const profile = user?.unsafeMetadata?.caltraxProfile;
+    
+    if (profile && profile.calories && profile.macros) {
+      console.log('✅ Found profile in Clerk metadata');
       
       const newDailyGoals = {
-        calories: profile.calories || 2000,
-        protein_g: profile.macros?.protein || 150,
-        fat_g: profile.macros?.fat || 65,
-        carbs_g: profile.macros?.carbs || 250
+        calories: Number(profile.calories),
+        protein_g: Number(profile.macros.protein),
+        fat_g: Number(profile.macros.fat),
+        carbs_g: Number(profile.macros.carbs)
       };
       
-      console.log('MacroDashboard - Setting goals:', newDailyGoals);
+      console.log('Setting daily goals:', newDailyGoals);
       setDailyGoals(newDailyGoals);
     } else {
-      console.log('MacroDashboard - No profile found, using defaults');
+      console.warn('❌ No profile found in Clerk metadata, using defaults');
+      console.log('Profile data:', profile);
     }
   }, [user, isLoaded]);
 

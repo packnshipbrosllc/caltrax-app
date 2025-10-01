@@ -140,16 +140,16 @@ class PaymentService {
   }
 
   // Get subscription details from Stripe
-  async getSubscriptionDetails(customerId) {
+  async getSubscriptionDetails(userId) {
     try {
-      if (!customerId) {
+      if (!userId) {
         return null;
       }
 
       const response = await fetch('/api/stripe/get-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId })
+        body: JSON.stringify({ userId })
       });
 
       if (!response.ok) {
@@ -164,37 +164,63 @@ class PaymentService {
     }
   }
 
+  // Create Stripe checkout session
+  async createCheckoutSession(userId, email, priceId, planType) {
+    try {
+      if (!userId || !email || !priceId) {
+        throw new Error('Missing required parameters for checkout');
+      }
+
+      const response = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId, 
+          email, 
+          priceId, 
+          planType 
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create checkout session');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      throw error;
+    }
+  }
+
   // Sync payment status with Stripe
   async syncPaymentStatus(clerkUserId) {
     try {
-      const user = await getUserByClerkId(clerkUserId);
-      
-      if (!user || !user.customer_id) {
-        return { hasPaid: false, plan: null };
-      }
-
       // Get current subscription status from Stripe
-      const subscriptionData = await this.getSubscriptionDetails(user.customer_id);
+      const subscriptionData = await this.getSubscriptionDetails(clerkUserId);
       
       if (!subscriptionData) {
         return { hasPaid: false, plan: null };
       }
 
-      const hasActiveSubscription = subscriptionData.hasSubscription && 
+      const hasActiveSubscription = subscriptionData.hasPaid && 
         ['active', 'trialing'].includes(subscriptionData.subscription?.status);
 
       // Update database with current status
-      if (hasActiveSubscription !== user.has_paid) {
+      const user = await getUserByClerkId(clerkUserId);
+      if (user && hasActiveSubscription !== user.has_paid) {
         await updateUserPayment(clerkUserId, {
           has_paid: hasActiveSubscription,
-          plan: subscriptionData.subscription?.plan || user.plan,
+          plan: subscriptionData.plan || user.plan,
           subscription_status: subscriptionData.subscription?.status || user.subscription_status
         });
       }
 
       return {
         hasPaid: hasActiveSubscription,
-        plan: subscriptionData.subscription?.plan || user.plan,
+        plan: subscriptionData.plan,
         subscriptionStatus: subscriptionData.subscription?.status
       };
     } catch (error) {

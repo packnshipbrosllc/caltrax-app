@@ -1,0 +1,13 @@
+{
+  "name": "food-lens-api",
+  "version": "1.0.0",
+  "description": "API endpoints for Food Lens app",
+  "main": "index.js",
+  "dependencies": {
+    "stripe": "^14.0.0",
+    "@supabase/supabase-js": "^2.38.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
