@@ -1,6 +1,6 @@
 {
   "name": "food-lens-app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "dependencies": {
     "@clerk/clerk-react": "^5.49.0",
