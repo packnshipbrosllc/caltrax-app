@@ -3,12 +3,5 @@
     "api/**/*.js": {
       "runtime": "nodejs18.x"
     }
-  },
-  "env": {
-    "STRIPE_SECRET_KEY": "@stripe-secret-key",
-    "STRIPE_WEBHOOK_SECRET": "@stripe-webhook-secret",
-    "SUPABASE_URL": "@supabase-url",
-    "SUPABASE_SERVICE_KEY": "@supabase-service-key",
-    "OPENAI_API_KEY": "@openai-api-key"
   }
 }
