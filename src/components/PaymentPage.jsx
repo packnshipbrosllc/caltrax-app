@@ -13,28 +13,14 @@ export default function PaymentPage({ onPaymentComplete, user }) {
 
   const plans = [
     {
-      id: 'trial',
-      name: 'Free Trial',
-      price: 'Free',
-      priceId: null, // No Stripe price ID for trial
-      period: '3 days',
-      features: [
-        'Full access to all features',
-        'Unlimited food scans',
-        'AI-powered nutrition analysis',
-        'Macro tracking dashboard',
-        'No credit card required'
-      ],
-      trial: true,
-      popular: false
-    },
-    {
       id: 'monthly',
       name: 'Monthly Plan',
       price: '$5',
-      priceId: 'price_1QABC123DEF456GHI', // Replace with your actual monthly Stripe Price ID
+      priceId: 'price_1S84cT2LmuiKVnPd3NXruhvk', // Monthly $5 plan
       period: '/month',
+      trialDays: '3-day free trial',
       features: [
+        '3-day free trial included',
         'Unlimited food scans',
         'AI-powered nutrition analysis',
         'Daily macro tracking',
@@ -46,13 +32,15 @@ export default function PaymentPage({ onPaymentComplete, user }) {
     },
     {
       id: 'yearly',
-      name: 'Yearly Plan',
+      name: 'Annual Plan',
       price: '$30',
-      priceId: 'price_1QXYZ789ABC123DEF', // Replace with your actual yearly Stripe Price ID
+      priceId: 'price_1S84dS2LmuiKVnPdj6UCRzsN', // Yearly $30 plan
       period: '/year',
+      trialDays: '3-day free trial',
       originalPrice: '$60',
       discount: '50% OFF',
       features: [
+        '3-day free trial included',
         'Everything in Monthly',
         'Priority support',
         'Advanced analytics',
@@ -74,15 +62,7 @@ export default function PaymentPage({ onPaymentComplete, user }) {
     setError(null);
 
     try {
-      // Handle free trial
-      if (plan.trial) {
-        // For free trial, just proceed to profile setup
-        console.log('Starting free trial for user:', user.id);
-        onPaymentComplete();
-        return;
-      }
-
-      // Handle paid plans
+      // Validate Price ID
       if (!plan.priceId) {
         throw new Error('Price ID not configured for this plan');
       }
@@ -154,7 +134,7 @@ export default function PaymentPage({ onPaymentComplete, user }) {
         )}
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.id}
@@ -181,6 +161,13 @@ export default function PaymentPage({ onPaymentComplete, user }) {
                     {plan.price}
                     <span className="text-lg text-zinc-400 font-normal">{plan.period}</span>
                   </div>
+                  {plan.originalPrice && (
+                    <p className="text-zinc-500 line-through">{plan.originalPrice}</p>
+                  )}
+                  {plan.discount && (
+                    <p className="text-green-400 font-medium">{plan.discount}</p>
+                  )}
+                  <p className="text-green-400 font-medium text-sm mt-2">{plan.trialDays}</p>
                 </CardHeader>
 
                 <CardContent>
@@ -198,11 +185,7 @@ export default function PaymentPage({ onPaymentComplete, user }) {
                   <Button
                     onClick={() => handleSubscribe(plan)}
                     disabled={isLoading}
-                    className={`w-full text-lg py-6 ${
-                      plan.trial 
-                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
-                        : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
-                    }`}
+                    className="w-full text-lg py-6 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
                   >
                     {isLoading ? (
                       <>
@@ -211,17 +194,8 @@ export default function PaymentPage({ onPaymentComplete, user }) {
                       </>
                     ) : (
                       <>
-                        {plan.trial ? (
-                          <>
-                            <Check className="w-5 h-5 mr-2" />
-                            Start Free Trial
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="w-5 h-5 mr-2" />
-                            Subscribe Now
-                          </>
-                        )}
+                        <CreditCard className="w-5 h-5 mr-2" />
+                        Start Free Trial
                       </>
                     )}
                   </Button>
