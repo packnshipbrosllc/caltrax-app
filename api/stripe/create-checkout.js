@@ -18,8 +18,8 @@ export default async function handler(req, res) {
   try {
     console.log('Creating checkout session for user:', userId);
 
-    // Get the domain - prioritize NEXT_PUBLIC_URL, fall back to origin
-    const domain = process.env.NEXT_PUBLIC_URL || req.headers.origin;
+    // Get the domain - use custom domain for production
+    const domain = process.env.NEXT_PUBLIC_URL || process.env.REACT_APP_APP_URL || 'https://www.caltrax.ai';
     console.log('Using domain:', domain);
 
     // Create Stripe checkout session
