@@ -34,7 +34,7 @@ export default function PaymentPage({ onPaymentComplete, user }) {
       id: 'yearly',
       name: 'Annual Plan',
       price: '$30',
-      priceId: 'price_1S84dS2LmuiKVnPdj6UCRzsN', // Yearly $30 plan
+      priceId: 'price_1SDdj12LmuiKVnPdD6HERWFX', // Yearly $30 plan
       period: '/year',
       trialDays: '3-day free trial',
       originalPrice: '$60',
