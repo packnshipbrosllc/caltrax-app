@@ -14,7 +14,6 @@ import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
 import SubscriptionManagement from './components/SubscriptionManagement';
 import AuthCallback from './components/AuthCallback';
-import DebugPanel from './components/DebugPanel';
 import { secureStorage, hasAdminAccess } from './utils/security';
 import { simpleStorage } from './utils/simpleStorage';
 import { authService } from './services/authService';
@@ -394,7 +393,6 @@ function AppContent() {
 
   return (
     <div className="App">
-      <DebugPanel currentView={currentView} user={user} profileCompleted={profileCompleted} />
       {currentView === 'landing' && <LandingPage onGetStarted={handleGetStarted} onShowSignIn={handleShowSignIn} />}
       {currentView === 'signup' && <SimpleSignupPage onSignup={handleSignup} onShowSignIn={handleShowSignIn} />}
       {currentView === 'signin' && <UserSignIn onSignIn={handleSignIn} onBackToSignup={() => setCurrentView('signup')} />}
