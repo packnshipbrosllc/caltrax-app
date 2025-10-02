@@ -18,8 +18,8 @@ export default async function handler(req, res) {
   try {
     console.log('Creating checkout session for user:', userId);
 
-    // Get the domain - use custom domain for production
-    const domain = process.env.NEXT_PUBLIC_URL || process.env.REACT_APP_APP_URL || 'https://www.caltrax.ai';
+    // Force domain to use custom domain instead of Vercel URL
+    const domain = 'https://www.caltrax.ai';
     console.log('Using domain:', domain);
 
     // Create Stripe checkout session
