@@ -18,6 +18,10 @@ export default async function handler(req, res) {
   try {
     console.log('Creating checkout session for user:', userId);
 
+    // Get the domain - prioritize NEXT_PUBLIC_URL, fall back to origin
+    const domain = process.env.NEXT_PUBLIC_URL || req.headers.origin;
+    console.log('Using domain:', domain);
+
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -28,8 +32,8 @@ export default async function handler(req, res) {
           quantity: 1
         }
       ],
-      success_url: `${process.env.NEXT_PUBLIC_URL || req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_URL || req.headers.origin}/dashboard`,
+      success_url: `${domain}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${domain}/payment`,
       customer_email: email,
       client_reference_id: userId,
       metadata: {
